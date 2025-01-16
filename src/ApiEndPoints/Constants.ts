@@ -1,0 +1,3 @@
+export const API_URL_RequestOTP = 'https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/users/request-otp';
+export const AUTH_TOKEN = `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml4bmJmdnllbmlrc2JxY2ZkbWRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE0MDE3NjgsImV4cCI6MjA0Njk3Nzc2OH0.h4JtVbwtKAe38yvtOLYvZIbhmMy6v2QCVg51Q11ubYg`; // Truncated for security
+export const API_URL_VerifyOTP = 'https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/users/verify-otp';

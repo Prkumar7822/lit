@@ -20,7 +20,7 @@ import axios from "axios";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import Video from 'react-native-video'; // Import video player component
-import { StackParamList } from '../../App'; // Import the param list
+import { StackParamList } from "../../App";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const screenHeight = Dimensions.get("window").height;
@@ -32,10 +32,10 @@ interface FeedItem {
     meme_title: string;
     image_url: string;
     description: string;
-    isLiked: boolean;
-    isDisliked: boolean;
-    comments: string[];
+    comments: Comment[];
     isPlaying?: boolean; // Add this property
+    liked_by_current_user: boolean,
+    disliked_by_current_user: boolean
 }
 
 interface Comment {
@@ -70,6 +70,7 @@ const App: React.FC = () => {
     const [page, setPage] = useState<number>(1);
     const [showCommentBox, setShowCommentBox] = useState(false);
     const [comment, setComment] = useState("");
+    const [comments, setComments] = useState<Comment[]>([]);
     const [commentsList, setCommentsList] = useState<string[]>([]);
     const [commentMemeId, setCommentMemeId] = useState<string | null>(null); // Track the meme ID for which the comment box is shown
     const flatListRef = useRef<FlatList>(null);
@@ -80,12 +81,14 @@ const App: React.FC = () => {
     const [likedMemes, setLikedMemes] = useState<Set<string>>(new Set());
     const [dislikedMemes, setDislikedMemes] = useState<Set<string>>(new Set());
     const [parentComments, setParentComments] = useState<Comment[]>([]);
+    const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null); // Track the comment ID being replied to
+    const [replyText, setReplyText] = useState<string>("");
 
 
 
     const navigation = useNavigation<NavigationProp>();
 
-    const token = 'eyJhbGciOiJIUzI1NiIsImtpZCI6IldsZFhxUFZFZndGbGJrQU4iLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2l4bmJmdnllbmlrc2JxY2ZkbWRvLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI5ZmYwMjg4NC0xZWRjLTRkMzYtYWYyNC1iMWQ0YjI1ZDBkNDgiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzM2NDk0MTkwLCJpYXQiOjE3MzU4ODkzOTAsImVtYWlsIjoiIiwicGhvbmUiOiI5MTYzMDA4NDU0NDYiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJwaG9uZSIsInByb3ZpZGVycyI6WyJwaG9uZSJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInBob25lX3ZlcmlmaWVkIjpmYWxzZSwic3ViIjoiOWZmMDI4ODQtMWVkYy00ZDM2LWFmMjQtYjFkNGIyNWQwZDQ4In0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoib3RwIiwidGltZXN0YW1wIjoxNzM1ODg5MzkwfV0sInNlc3Npb25faWQiOiI3YzNmNjJkMC0xZTUzLTQwMDMtYjNiNS1lYjFjOTlkOTg4MWEiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.A127wbcz7JvlvffZgb89ZlFVcxsM8zetqrP2kbo1cR0'; // Replace with your actual JWT token
+    const token = 'eyJhbGciOiJIUzI1NiIsImtpZCI6IldsZFhxUFZFZndGbGJrQU4iLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2l4bmJmdnllbmlrc2JxY2ZkbWRvLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI5ZmYwMjg4NC0xZWRjLTRkMzYtYWYyNC1iMWQ0YjI1ZDBkNDgiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzM3MDk5NDE2LCJpYXQiOjE3MzY0OTQ2MTYsImVtYWlsIjoiIiwicGhvbmUiOiI5MTYzMDA4NDU0NDYiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJwaG9uZSIsInByb3ZpZGVycyI6WyJwaG9uZSJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInBob25lX3ZlcmlmaWVkIjpmYWxzZSwic3ViIjoiOWZmMDI4ODQtMWVkYy00ZDM2LWFmMjQtYjFkNGIyNWQwZDQ4In0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoib3RwIiwidGltZXN0YW1wIjoxNzM2NDk0NjE2fV0sInNlc3Npb25faWQiOiIyYjdkMjhhZC05OTc0LTQwMjItYTUyZS05YzkyOTZkNmFjZTciLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.iqHPqF8XFyuBKXsxQaKlwBqSiS7ymKGWl09ZsGgimeE'; // Replace with your actual JWT token
 
 
     // Fetch feed data from API
@@ -101,7 +104,7 @@ const App: React.FC = () => {
                     },
                 }
             );
-            console.log("Fetched data:", response.data.data);
+            // console.log("Fetched data:", response.data.data);
             const Data = response.data.data;
             // console.log("Fetched data:", data);
             if (Array.isArray(Data)) {
@@ -177,33 +180,32 @@ const App: React.FC = () => {
         itemVisiblePercentThreshold: 50,
     };
 
+
     const likeMeme = async (meme_id: string) => {
         try {
-            const response = await axios.post('https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/like',
-                {
-                    likeable_type: "like",
-                    resource_type: "meme",
-                    resource_id: meme_id
+            const response = await axios.post(`https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/like`, {
+                likeable_type: "like",
+                resource_type: "meme",
+                resource_id: meme_id
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
                 },
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                });
+            });
             console.log("Liked meme:", response.data);
-            setLikedMemes((prev) => new Set(prev).add(meme_id));
         } catch (error: any) {
-
             console.error("Error liking meme:", error.message);
+            // Revert the local state update if the API call fails
 
         }
     };
+
 
     const deleteLikeMeme = async (meme_id: string) => {
         try {
             const response = await axios.delete(`https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/like`, {
                 headers: {
-                    Authorization: `Bearer ${token}`
+                    Authorization: `Bearer ${token}`,
                 },
                 data: {
                     likeable_type: "like",
@@ -211,60 +213,64 @@ const App: React.FC = () => {
                     resource_id: meme_id
                 }
             });
-
             console.log("Deleted like:", response.data);
-            setLikedMemes((prev) => {
-                const newSet = new Set(prev);
-                newSet.delete(meme_id);
-                return newSet;
-            });
+            // setFeedData((prevData) =>
+            //     prevData.map((item) =>
+            //         item.meme_id === meme_id ? { ...item, liked_by_current_user: false } : item
+            //     )
+            // );S
         } catch (error: any) {
             console.error("Error deleting like:", error.message);
         }
     };
 
-    const handleLike = (index: number) => {
+    const handleLike = async (index: number) => {
         const meme_id = feedData[index].meme_id;
-        const isLiked = likedMemes.has(meme_id); // Check if meme is in the likedMemes set
-        const isDisliked = dislikedMemes.has(meme_id); // Check if meme is in the dislikedMemes set 
-        if (isLiked && isDisliked) {
-            deleteLikeMeme(meme_id);
-            likeMeme(meme_id);
+        const isLiked = feedData[index].liked_by_current_user;
+        const isDisliked = feedData[index].disliked_by_current_user;
+        console.log("isLiked", isLiked);
+        console.log("isDisliked", isDisliked);
 
-        } if (isLiked) {
-            deleteLikeMeme(meme_id);
+        try {
+            if (isLiked) {
+                await deleteLikeMeme(meme_id);
+            } else {
+                await likeMeme(meme_id);
+                // if (isDisliked) {
+                //     await deleteDislikeMeme(meme_id);
+                // }
+            }
+            // Update the state to reflect the changes
+            setFeedData((prevData) =>
+                prevData.map((item, idx) =>
+                    idx === index
+                        ? {
+                            ...item,
+                            liked_by_current_user: !isLiked,
+                            disliked_by_current_user: isLiked ? isDisliked : false,
+                        }
+                        : item
+                )
+            );
+        } catch (error: any) {
+            console.error("Error handling like:", error.message);
         }
-        else {
-            likeMeme(meme_id);
-        }
-
-        setFeedData((prevData) =>
-            prevData.map((item, i) =>
-                i === index ? { ...item, isLiked: !item.isLiked, isDisliked: false } : item
-            )
-        );
     };
 
     const dislikeMeme = async (meme_id: string) => {
         try {
-            const response = await axios.post('https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/like',
-                {
-                    likeable_type: "dislike",
-                    resource_type: "meme",
-                    resource_id: meme_id
+            const response = await axios.post(`https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/like`, {
+                likeable_type: "dislike",
+                resource_type: "meme",
+                resource_id: meme_id
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
                 },
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                });
+            });
             console.log("Disliked meme:", response.data);
         } catch (error: any) {
-            if (error.response && error.response.status === 409) {
-                console.error("Meme already disliked:", error.message);
-            } else {
-                console.error("Error disliking meme:", error.message);
-            }
+            console.error("Error disliking meme:", error.message);
         }
     };
 
@@ -272,7 +278,7 @@ const App: React.FC = () => {
         try {
             const response = await axios.delete(`https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/like`, {
                 headers: {
-                    Authorization: `Bearer ${token}`
+                    Authorization: `Bearer ${token}`,
                 },
                 data: {
                     likeable_type: "dislike",
@@ -281,36 +287,286 @@ const App: React.FC = () => {
                 }
             });
             console.log("Deleted dislike:", response.data);
+            // setFeedData((prevData) =>
+            //     prevData.map((item) =>
+            //         item.meme_id === meme_id ? { ...item, disliked_by_current_user: false } : item
+            //     )
+            // );
         } catch (error: any) {
             console.error("Error deleting dislike:", error.message);
         }
     };
 
-    const handleDislike = (index: number) => {
+    const handleDislike = async (index: number) => {
         const meme_id = feedData[index].meme_id;
-        const isDisliked = dislikedMemes.has(meme_id); // Check if meme is in the dislikedMemes set
-        const isLiked = likedMemes.has(meme_id); // Check if meme is in the likedMemes set
-        if (isLiked && isDisliked) {
-            deleteLikeMeme(meme_id);
-            dislikeMeme(meme_id);
+        const isLiked = feedData[index].liked_by_current_user;
+        const isDisliked = feedData[index].disliked_by_current_user;
+
+        try {
+            if (isDisliked) {
+                await deleteDislikeMeme(meme_id);
+            } else {
+                await dislikeMeme(meme_id);
+                // if (isLiked) {
+                //     await deleteLikeMeme(meme_id);
+                // }
+            }
+            setFeedData((prevData) =>
+                prevData.map((item, idx) =>
+                    idx === index
+                        ? {
+                            ...item,
+                            disliked_by_current_user: !isDisliked,
+                            liked_by_current_user: isDisliked ? isLiked : false,
+                        }
+                        : item
+                )
+            );
+        } catch (error: any) {
+            console.error("Error handling dislike:", error.message);
         }
-        if (isDisliked) {
-            deleteDislikeMeme(meme_id);
-            setDislikedMemes((prev) => {
-                const newSet = new Set(prev);
-                newSet.delete(meme_id);
-                return newSet;
+    };
+
+    const likeComment = async (comment_id: string) => {
+        try {
+            const response = await axios.post(`https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/like`, {
+                likeable_type: "like",
+                resource_type: "comment",
+                resource_id: comment_id
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
             });
+            console.log("Liked comment:", response.data);
+            setParentComments((prevComments) =>
+                prevComments.map((comment) =>
+                    comment.comment_id === comment_id ? { ...comment, isLiked: true, isDisliked: false } : comment
+                )
+            );
+        } catch (error: any) {
+            console.error("Error liking comment:", error.message);
         }
-        else {
-            dislikeMeme(meme_id);
-            setDislikedMemes((prev) => new Set(prev).add(meme_id));
+    };
+
+    const deleteLikeComment = async (comment_id: string) => {
+        try {
+            const response = await axios.delete(`https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/like`, {
+                data: {
+                    likeable_type: "like",
+                    resource_type: "comment",
+                    resource_id: comment_id
+                },
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            console.log("Deleted like on comment:", response.data);
+            setParentComments((prevComments) =>
+                prevComments.map((comment) =>
+                    comment.comment_id === comment_id ? { ...comment, isLiked: false } : comment
+                )
+            );
+        } catch (error: any) {
+            console.error("Error deleting like on comment:", error.message);
         }
-        setFeedData((prevData) =>
-            prevData.map((item, i) =>
-                i === index ? { ...item, isDisliked: !item.isDisliked, isLiked: false } : item
-            )
+    };
+
+    const dislikeComment = async (comment_id: string) => {
+        try {
+            const response = await axios.post(`https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/like`, {
+                likeable_type: "dislike",
+                resource_type: "comment",
+                resource_id: comment_id
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            console.log("Disliked comment:", response.data);
+            setParentComments((prevComments) =>
+                prevComments.map((comment) =>
+                    comment.comment_id === comment_id ? { ...comment, isDisliked: true, isLiked: false } : comment
+                )
+            );
+        } catch (error: any) {
+            console.error("Error disliking comment:", error.message);
+        }
+    };
+
+    const deleteDislikeComment = async (comment_id: string) => {
+        try {
+            const response = await axios.delete(`https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/like`, {
+                data: {
+                    likeable_type: "dislike",
+                    resource_type: "comment",
+                    resource_id: comment_id
+                },
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            console.log("Deleted dislike on comment:", response.data);
+            setParentComments((prevComments) =>
+                prevComments.map((comment) =>
+                    comment.comment_id === comment_id ? { ...comment, isDisliked: false } : comment
+                )
+            );
+        } catch (error: any) {
+            console.error("Error deleting dislike on comment:", error.message);
+        }
+    };
+
+
+
+
+    const handleLikeComment = async (comment_id: string) => {
+        // Check if it's a child comment
+        const parentCommentIndex = parentComments.findIndex(parent =>
+            parent.childComments?.some(child => child.comment_id === comment_id)
         );
+
+        if (parentCommentIndex !== -1) {
+            const parentComment = parentComments[parentCommentIndex];
+            const childComments = parentComment.childComments || [];
+            const childCommentIndex = childComments.findIndex(child => child.comment_id === comment_id);
+
+            if (childCommentIndex !== -1) {
+                const isLiked = childComments[childCommentIndex].isLiked;
+                const isDisliked = childComments[childCommentIndex].isDisliked;
+
+                try {
+                    if (isLiked) {
+                        await deleteLikeComment(comment_id);
+                    } else {
+                        await likeComment(comment_id);
+                        // if (isDisliked) {
+                        //     await deleteDislikeComment(comment_id); // Remove dislike if it exists
+                        // }
+                    }
+
+                    const updatedChildComments = [...childComments];
+                    updatedChildComments[childCommentIndex] = {
+                        ...updatedChildComments[childCommentIndex],
+                        isLiked: !isLiked,
+                        isDisliked: isLiked ? isDisliked : false, // Remove dislike if liked
+                    };
+
+                    const updatedParentComments = [...parentComments];
+                    updatedParentComments[parentCommentIndex] = {
+                        ...parentComment,
+                        childComments: updatedChildComments,
+                    };
+
+                    setParentComments(updatedParentComments);
+                } catch (error: any) {
+                    console.error("Error handling like on child comment:", error.message);
+                }
+            }
+        } else {
+            // Handle parent comment like toggle
+            const commentIndex = parentComments.findIndex(comment => comment.comment_id === comment_id);
+            if (commentIndex !== -1) {
+                const isLiked = parentComments[commentIndex].isLiked;
+                const isDisliked = parentComments[commentIndex].isDisliked;
+
+                try {
+                    if (isLiked) {
+                        await deleteLikeComment(comment_id);
+                    } else {
+                        await likeComment(comment_id);
+                        // if (isDisliked) {
+                        //     await deleteDislikeComment(comment_id); // Remove dislike if it exists
+                        // }
+                    }
+
+                    const updatedParentComments = [...parentComments];
+                    updatedParentComments[commentIndex] = {
+                        ...updatedParentComments[commentIndex],
+                        isLiked: !isLiked,
+                        isDisliked: isLiked ? isDisliked : false, // Remove dislike if liked
+                    };
+
+                    setParentComments(updatedParentComments);
+                } catch (error: any) {
+                    console.error("Error handling like on parent comment:", error.message);
+                }
+            }
+        }
+    };
+
+
+    const handleDislikeComment = async (comment_id: string) => {
+        const parentCommentIndex = parentComments.findIndex(parent =>
+            parent.childComments?.some(child => child.comment_id === comment_id)
+        );
+
+        if (parentCommentIndex !== -1) {
+            const parentComment = parentComments[parentCommentIndex];
+            const childComments = parentComment.childComments || [];
+            const childCommentIndex = childComments.findIndex(child => child.comment_id === comment_id);
+
+            if (childCommentIndex !== -1) {
+                const isLiked = childComments[childCommentIndex].isLiked;
+                const isDisliked = childComments[childCommentIndex].isDisliked;
+
+                try {
+                    if (isDisliked) {
+                        await deleteDislikeComment(comment_id);
+                    } else {
+                        await dislikeComment(comment_id);
+                        // if (isLiked) {
+                        //     await deleteLikeComment(comment_id); // Remove like if it exists
+                        // }
+                    }
+
+                    const updatedChildComments = [...childComments];
+                    updatedChildComments[childCommentIndex] = {
+                        ...updatedChildComments[childCommentIndex],
+                        isDisliked: !isDisliked,
+                        isLiked: isDisliked ? isLiked : false, // Remove like if disliked
+                    };
+
+                    const updatedParentComments = [...parentComments];
+                    updatedParentComments[parentCommentIndex] = {
+                        ...parentComment,
+                        childComments: updatedChildComments,
+                    };
+
+                    setParentComments(updatedParentComments);
+                } catch (error: any) {
+                    console.error("Error handling dislike on child comment:", error.message);
+                }
+            }
+        } else {
+            const commentIndex = parentComments.findIndex(comment => comment.comment_id === comment_id);
+            if (commentIndex !== -1) {
+                const isLiked = parentComments[commentIndex].isLiked;
+                const isDisliked = parentComments[commentIndex].isDisliked;
+
+                try {
+                    if (isDisliked) {
+                        await deleteDislikeComment(comment_id);
+                    } else {
+                        await dislikeComment(comment_id);
+                        // if (isLiked) {
+                        //     await deleteLikeComment(comment_id); // Remove like if it exists
+                        // }
+                    }
+
+                    const updatedParentComments = [...parentComments];
+                    updatedParentComments[commentIndex] = {
+                        ...updatedParentComments[commentIndex],
+                        isDisliked: !isDisliked,
+                        isLiked: isDisliked ? isLiked : false, // Remove like if disliked
+                    };
+
+                    setParentComments(updatedParentComments);
+                } catch (error: any) {
+                    console.error("Error handling dislike on parent comment:", error.message);
+                }
+            }
+        }
     };
 
     const handleCommentIconPress = async (meme_id: string) => {
@@ -366,6 +622,38 @@ const App: React.FC = () => {
         }
     };
 
+
+    const handleReplySubmit = async () => {
+        if (!replyingToCommentId) return;
+
+        try {
+            const response = await axios.post(`https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/comment`, {
+                meme_id: commentMemeId,
+                parent_comment_id: replyingToCommentId,
+                comment: replyText,
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            console.log("Reply added successfully:", response.data.data);
+
+            // Update state with the new reply
+            setComments((prevComments) =>
+                prevComments.map((comment) =>
+                    comment.comment_id === replyingToCommentId
+                        ? { ...comment, reply_count: comment.reply_count + 1 }
+                        : comment
+                )
+            );
+            setReplyText("");
+            setReplyingToCommentId(null);
+        } catch (error: any) {
+            console.error("Error adding reply:", error.message);
+        }
+    };
+
     const fetchChildComments = async (parent_comment_id: string) => {
         try {
             const response = await axios.get(`https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/comment`, {
@@ -382,18 +670,27 @@ const App: React.FC = () => {
             });
             console.log("Child comments fetched successfully:", response.data.data);
             return response.data.data;
+            setComments((prevComments) =>
+                prevComments.map((comment) =>
+                    comment.comment_id === parent_comment_id
+                        ? { ...comment, childComments: response.data.data }
+                        : comment
+                )
+            );
         } catch (error: any) {
             console.error("Error fetching child comments:", error.message);
             return [];
         }
     };
 
-    const handleShare = async (memeId: string) => {
+    const handleShare = async (memeId: string, imageUrl: string) => {
         const url = `https://myapp.com/meme/${memeId}`;
         try {
             const result = await Share.share({
                 message: `Check out this meme: ${url}`,
+                url: imageUrl,  // Pass the image URL here
             });
+            
             if (result.action === Share.sharedAction) {
                 console.log("Shared successfully!");
             } else if (result.action === Share.dismissedAction) {
@@ -425,15 +722,15 @@ const App: React.FC = () => {
                 </View>
                 <Text style={styles.commentText}>{childComment.comment}</Text>
                 <View style={styles.likeDislikeContainer}>
-                    <TouchableOpacity style={styles.likeButton}>
+                    <TouchableOpacity onPress={() => handleLikeComment(childComment.comment_id)} style={styles.likeButton}>
                         <Image
-                            source={require("../assests/images/like.png")}
+                            source={childComment.isLiked ? require("../assests/images/likeh.png") : require("../assests/images/like.png")}
                             style={styles.likeIcon}
                         />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.dislikeButton}>
+                    <TouchableOpacity onPress={() => handleDislikeComment(childComment.comment_id)} style={styles.dislikeButton}>
                         <Image
-                            source={require("../assests/images/dislike.png")}
+                            source={childComment.isDisliked ? require("../assests/images/dislikeh.png") : require("../assests/images/dislike.png")}
                             style={styles.dislikeIcon}
                         />
                     </TouchableOpacity>
@@ -442,73 +739,83 @@ const App: React.FC = () => {
         ));
     };
 
-    const renderItem: ListRenderItem<FeedItem> = ({ item, index }) => (
-        <View style={styles.fullScreenContainer}>
-            <View style={styles.titlecontainer}>
-                <Text>HIII</Text>
-                <Text numberOfLines={1} style={styles.title}>{item.meme_title}</Text>
-            </View>
-            <View style={styles.videocontainer}>
-                {item.image_url ? (
-                    <Video
-                        source={{ uri: item.image_url }}
-                        style={styles.mainImage}
-                        controls={false}
-                        resizeMode="cover"
-                        repeat={true}
-                        playInBackground={false}
-                        paused={currentPlayingIndex !== index}
-                    />
-                ) : (
-                    <Image source={{ uri: item.image_url }} style={styles.mainImage} />
-                )}
-            </View>
-            <View style={styles.desccontianer}>
+    const baseUrl = "https://ixnbfvyeniksbqcfdmdo.supabase.co/storage/v1/object/public/";
 
+    // Helper function to determine if the file is a video
+    const isVideo = (url: string | null) => {
+        if (!url) return false;
+        const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+        return videoExtensions.some((ext) => url.endsWith(ext));
+    };
 
-                <Text numberOfLines={3} style={styles.description}>{item.description}</Text>
-            </View>
-
-            <View style={styles.footerIcons}>
-                <View style={styles.iconCircle}>
-                    <TouchableOpacity onPress={() => handleLike(index)}>
-                        <Image
-                            source={item.isLiked ? require("../assests/images/likeh.png") : require("../assests/images/like.png")}
-                            style={styles.optionsIcon}
-                        />
-                    </TouchableOpacity>
+    const renderItem: ListRenderItem<FeedItem> = ({ item, index }) => {
+        const fileUrl = item.image_url ? `${baseUrl}${item.image_url}` : undefined
+        const isFileVideo = fileUrl && isVideo(fileUrl);
+    
+        return (
+            <View style={styles.fullScreenContainer}>
+                <View style={styles.titlecontainer}>
+                    <Text numberOfLines={1} style={styles.title}>{item.meme_title}</Text>
                 </View>
-                <View style={styles.iconCircle}>
-                    <TouchableOpacity onPress={() => handleDislike(index)}>
-                        <Image
-                            source={require("../assests/images/dislike.png")}
-                            style={[styles.optionsIcon, { tintColor: item.isDisliked ? "blue" : "white" }]}
+    
+                <View style={styles.videocontainer}>
+                    {isFileVideo ? (
+                        <Video
+                            source={{ uri: fileUrl }}
+                            style={styles.mainImage}
+                            controls={false}
+                            resizeMode="cover"
+                            repeat={true}
+                            playInBackground={false}
+                            paused={currentPlayingIndex !== index} // Ensure `currentPlayingIndex` is handled properly
                         />
-                    </TouchableOpacity>
+                    ) : (
+                        <Image source={{ uri: fileUrl }} style={styles.mainImage} />
+                    )}
                 </View>
-                <TouchableOpacity onPress={() => {
-                    handleCommentIconPress(item.meme_id)
-                }}>
+    
+                <View style={styles.desccontianer}>
+                    <Text numberOfLines={3} style={styles.description}>{item.description}</Text>
+                </View>
+    
+                <View style={styles.footerIcons}>
                     <View style={styles.iconCircle}>
-                        <Image
-                            source={require("../assests/images/Vector.png")}
-                            style={styles.optionsIcon}
-                        />
+                        <TouchableOpacity onPress={() => handleLike(index)}>
+                            <Image
+                                source={item.liked_by_current_user ? require("../assests/images/likeh.png") : require("../assests/images/like.png")}
+                                style={styles.optionsIcon}
+                            />
+                        </TouchableOpacity>
                     </View>
-                </TouchableOpacity>
-
-                <View style={styles.iconCircle}>
-                    <TouchableOpacity onPress={() => handleShare(item.meme_id)}>
-                        <Image
-                            source={require("../assests/images/share.png")}
-                            style={[styles.optionsIcon, { tintColor: "white" }]}
-                        />
+                    <View style={styles.iconCircle}>
+                        <TouchableOpacity onPress={() => handleDislike(index)}>
+                            <Image
+                                source={item.disliked_by_current_user ? require("../assests/images/dislikeh.png") : require("../assests/images/dislike.png")}
+                                style={styles.optionsIcon}
+                            />
+                        </TouchableOpacity>
+                    </View>
+                    <TouchableOpacity onPress={() => handleCommentIconPress(item.meme_id)}>
+                        <View style={styles.iconCircle}>
+                            <Image
+                                source={require("../assests/images/Vector.png")}
+                                style={styles.optionsIcon}
+                            />
+                        </View>
                     </TouchableOpacity>
+    
+                    <View style={styles.iconCircle}>
+                        <TouchableOpacity onPress={() => handleShare(item.meme_id,item.image_url)}>
+                            <Image
+                                source={require("../assests/images/share.png")}
+                                style={[styles.optionsIcon, { tintColor: "white" }]}
+                            />
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </View>
-
-        </View>
-    );
+        );
+    };
 
     const NavigationBar = () => (
         <View style={styles.header}>
@@ -560,7 +867,7 @@ const App: React.FC = () => {
                 onRequestClose={handleCloseModal}
             >
                 <View style={styles.modalContainer}>
-                    <View style={styles.modalContent}>
+                    <View style={styles.loginModalContent}>
                         <TouchableOpacity style={styles.closeButton} onPress={() => setShowLoginModal(false)}>
                             <Image source={require("../assests/images/cross.png")} style={styles.closeIcon} />
                         </TouchableOpacity>
@@ -568,7 +875,7 @@ const App: React.FC = () => {
                         <Text style={styles.modalText}>Unlock Full Access!</Text>
                         <Text style={styles.modalText}>Log in to access meme feeds, comment, share, view flash news, and much more.</Text>
                         <Text style={styles.abovelogin}>You’re one step away!.</Text>
-                        <TouchableOpacity style={styles.loginButton} onPress={() => { /* Handle login */ }}>
+                        <TouchableOpacity style={styles.loginButton} onPress={() => navigation.navigate('LoginPage')}>
                             <Text style={styles.loginButtontext}>Login</Text>
                         </TouchableOpacity>
                     </View>
@@ -584,64 +891,102 @@ const App: React.FC = () => {
                     <View style={styles.modalOverlay} />
                 </TouchableWithoutFeedback>
                 <View style={styles.modalContent}>
-                    <FlatList
-                        data={parentComments}
-                        renderItem={({ item }) => (
-                            <View key={item.comment_id} style={styles.commentContainer}>
-                                <View style={styles.profileContainer}>
-                                    <Image
-                                        source={{ uri: item.User.profile_picture_url || 'https://via.placeholder.com/150' }}
-                                        style={styles.profileImage}
-                                    />
-                                    <Text style={styles.commentUsername}>{item.User.username}</Text>
-                                </View>
-                                <View>
-                                    <Text style={styles.commentText}>{item.comment}</Text>
-                                </View>
-                                <View style={styles.likeDislikeContainer}>
-                                    <TouchableOpacity style={styles.likeButton}>
+                    <View style={{ height: screenHeight / 2 }}>
+
+                        <FlatList
+                            data={parentComments}
+                            renderItem={({ item }) => (
+                                <View key={item.comment_id} style={styles.commentContainer}>
+                                    <View style={styles.profileContainer}>
                                         <Image
-                                            source={require("../assests/images/like.png")}
-                                            style={styles.likeIcon}
+                                            source={{ uri: item.User.profile_picture_url || 'https://via.placeholder.com/150' }}
+                                            style={styles.profileImage}
                                         />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={styles.dislikeButton}>
-                                        <Image
-                                            source={require("../assests/images/dislike.png")}
-                                            style={styles.dislikeIcon}
-                                        />
-                                    </TouchableOpacity>
+                                        <Text style={styles.commentUsername}>{item.User.username}</Text>
+                                    </View>
+                                    <View>
+                                        <Text style={styles.commentText}>{item.comment}</Text>
+                                    </View>
+                                    <View style={styles.likeDislikeContainer}>
+                                        <TouchableOpacity onPress={() => handleLikeComment(item.comment_id)} style={styles.likeButton}>
+                                            <Image
+                                                source={item.isLiked ? require("../assests/images/likeh.png") : require("../assests/images/like.png")}
+                                                style={styles.likeIcon}
+                                            />
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => handleDislikeComment(item.comment_id)} style={styles.dislikeButton}>
+                                            <Image
+                                                source={item.isDisliked ? require("../assests/images/dislikeh.png") : require("../assests/images/dislike.png")}
+                                                style={styles.dislikeIcon}
+                                            />
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                setReplyingToCommentId(item.comment_id);
+                                                setReplyText(""); // Optional: clear any previous reply text
+                                                setComment("");
+                                            }}
+                                        >
+                                            <View style={styles.replyContainer}>
+                                                <Image
+                                                    source={require('../assests/images/reply.png')}
+                                                    style={styles.optionsIcon}
+                                                />
+                                                <Text style={styles.replyText}>Reply</Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    </View>
+                                    {item.reply_count > 0 && (
+                                        <TouchableOpacity
+                                            onPress={async () => {
+                                                const childComments = await fetchChildComments(item.comment_id);
+                                                setParentComments((prevComments) =>
+                                                    prevComments.map((comment) =>
+                                                        comment.comment_id === item.comment_id
+                                                            ? { ...comment, childComments }
+                                                            : comment
+                                                    )
+                                                );
+                                            }}
+                                        >
+                                            <View style={styles.viewRepliesContainer}>
+                                                <Text style={styles.viewRepliesText}>{item.reply_count}</Text>
+                                                <Text style={styles.viewRepliesText}>Replies</Text>
+                                                <Image
+                                                    source={require('../assests/images/downarrow.png')}
+                                                    style={styles.optionsIcon}
+                                                />
+                                            </View>
+                                        </TouchableOpacity>
+                                    )}
+                                    {item.childComments && renderChildComments(item.childComments)}
                                 </View>
-                                {item.reply_count > 0 && (
-                                    <TouchableOpacity
-                                        onPress={async () => {
-                                            const childComments = await fetchChildComments(item.comment_id);
-                                            setParentComments((prevComments) =>
-                                                prevComments.map((comment) =>
-                                                    comment.comment_id === item.comment_id
-                                                        ? { ...comment, childComments }
-                                                        : comment
-                                                )
-                                            );
-                                        }}
-                                    >
-                                        <Text style={styles.viewRepliesText}>View Replies</Text>
-                                    </TouchableOpacity>
-                                )}
-                                {item.childComments && renderChildComments(item.childComments)}
-                            </View>
-                        )}
-                        keyExtractor={(item) => item.comment_id}
-                    />
-                    <View style={styles.commentBox}>
-                        <TextInput
-                            style={styles.commentInput}
-                            value={comment}
-                            onChangeText={setComment}
-                            placeholder="Add a comment..."
-                            placeholderTextColor="gray"
+                            )}
+                            keyExtractor={(item) => item.comment_id}
                         />
-                        <Button title="Post" onPress={handleCommentSubmit} />
+                        {/* Unified Input Box */}
+                        <View style={styles.commentBox}>
+                            <TextInput
+                                style={styles.commentInput}
+                                value={replyingToCommentId ? replyText : comment}
+                                onChangeText={(text) => (replyingToCommentId ? setReplyText(text) : setComment(text))}
+                                placeholder={
+                                    replyingToCommentId
+                                        ? 'Write your reply...'
+                                        : 'Type your comment...'
+                                }
+                                placeholderTextColor="gray"
+                            />
+                            <TouchableOpacity
+                                onPress={replyingToCommentId ? handleReplySubmit : handleCommentSubmit}
+                            >
+                                <Image
+                                    source={require('../assests/images/send.png')}
+                                    style={styles.optionsIcon}
+                                />
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -667,6 +1012,7 @@ const styles = StyleSheet.create({
         // Align text to the left
         alignSelf: "flex-start", // Ensure it aligns to the start of the container
         paddingHorizontal: 10, // Add padding for readability
+        marginTop: 10,
     },
     container: {
         flex: 1,
@@ -680,7 +1026,7 @@ const styles = StyleSheet.create({
     },
     mainImage: {
         width: "90%",
-        height: screenHeight * 0.5, // Adjust height to fit content proportionally
+        height: screenHeight * 0.4, // Adjust height to fit content proportionally
         borderRadius: 8,
         marginVertical: 16,
         alignSelf: "center",
@@ -742,13 +1088,26 @@ const styles = StyleSheet.create({
         padding: 20,
         backgroundColor: "#1c1c1e", // Dark theme consistency
         borderRadius: 16,
-        alignItems: "center",
+        // alignItems: "center",
         marginBottom: 20, // Add spacing from the bottom
     },
     modalText: {
         fontSize: 18,
         color: "white", // Match theme
         textAlign: "center",
+        marginBottom: 12,
+    },
+    loginModalContent: {
+        backgroundColor: '#1c1c1e',
+        padding: 20,
+        borderRadius: 16,
+        alignItems: 'center',
+        margin: 20,
+    },
+    loginModalText: {
+        fontSize: 18,
+        color: 'white',
+        textAlign: 'center',
         marginBottom: 12,
     },
     loginButton: {
@@ -795,7 +1154,6 @@ const styles = StyleSheet.create({
     },
     commentBox: {
         flexDirection: 'row',
-        alignItems: 'center',
         marginTop: 16,
         backgroundColor: '#1c1c1e',
         borderRadius: 8,
@@ -823,10 +1181,12 @@ const styles = StyleSheet.create({
     commentUsername: {
         fontWeight: 'bold',
         color: 'white',
+        marginLeft: 6,
     },
     commentText: {
         color: 'white',
         marginBottom: 8,
+        marginLeft: 50,
     },
     icon: {
         height: 24,
@@ -850,9 +1210,8 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
     likeIcon: {
-        width: 24,
-        height: 24,
-        tintColor: 'red',
+        width: 20,
+        height: 20,
     },
     modalOverlay: {
         flex: 1,
@@ -862,17 +1221,21 @@ const styles = StyleSheet.create({
     likeDislikeContainer: {
         flexDirection: 'row',
         justifyContent: 'flex-start',
+        marginLeft: 50,
+        marginTop: 8,
     },
     dislikeButton: {
         marginRight: 16,
+        marginLeft: 8,
+        marginTop: 1,
     },
     dislikeIcon: {
-        width: 24,
-        height: 24,
-        tintColor: 'gray',
+        width: 20,
+        height: 20,
+        marginLeft: 8,
     },
     viewRepliesText: {
-        color: 'blue',
+        color: 'white',
         marginTop: 8,
     },
     childCommentContainer: {
@@ -881,6 +1244,39 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         flexDirection: 'column', // Ensure column layout for child comments
     },
+    replyText: {
+        color: '#007BFF',
+        marginTop: 10,
+        marginBottom: 10,
+        fontSize: 16,
+        marginLeft: 10,
+    },
+    replyBox: {
+        marginTop: 10,
+        marginBottom: 10,
+        padding: 10,
+        backgroundColor: '#f0f0f0',
+        borderRadius: 5,
+    },
+    replyInput: {
+        height: 40,
+        borderColor: 'gray',
+        borderWidth: 1,
+        borderRadius: 5,
+        paddingLeft: 10,
+        marginBottom: 10,
+        backgroundColor: 'white',
+    },
+    replyContainer: {
+        flexDirection: 'row',
+    },
+    viewRepliesContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginLeft: 50,
+    }
 });
 
 export default App;
+
+

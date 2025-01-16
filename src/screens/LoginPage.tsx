@@ -15,176 +15,130 @@ import {
 import Icon from 'react-native-vector-icons/FontAwesome';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
-import axios from 'axios';
-
-type RootStackParamList = {
-  LoginPage: undefined;
-  VerifyOtpPage: { mobileNumber: string };
-};
+import { useLoginViewModel } from '../View_model/SendOtpVM';
 
 const LoginPage = () => {
-  const [mobile, setMobile] = useState('');
-  const [focused, setFocused] = useState(false);
-  const [isValid, setIsValid] = useState(true);
-  const [otpSent, setOtpSent] = useState(false);
+  const navigation = useNavigation<NavigationProp<any>>();
 
-  // Animated label position and font size
+  const {
+    mobile,
+    isValid,
+    otpSent,
+    errorMessage,
+    setMobile,
+    setIsValid,
+    handleGetMagicCode,
+    handleRetry,
+    setErrorMessage,
+  } = useLoginViewModel();
+
   const labelPosition = useRef(new Animated.Value(20)).current;
   const labelFontSize = useRef(new Animated.Value(14)).current;
-
-  // Animated label color
   const labelColor = useRef(new Animated.Value(0)).current;
 
-  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const [buttonPressed, setButtonPressed] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
-  // Label animations based on focus or input
+  // Update validation pattern for mobile
+  const validateMobileNumber = (text: string) => {
+    const mobileNumberPattern = /^\+91\d{10}$/; // Ensure number starts with +91
+    return mobileNumberPattern.test(text);
+  };
+
+  const handleMobileChange = (text: string) => {
+    setMobile(text);
+    if (errorMessage) {
+      setErrorMessage('');
+    }
+    setIsValid(validateMobileNumber(text));
+  };
+
+  const navigateToVerifyOtp = () => {
+    setButtonPressed(true);
+    if (isValid) {
+      handleGetMagicCode(navigation);
+    }
+  };
+
   useEffect(() => {
     Animated.timing(labelPosition, {
-      toValue: focused || mobile ? -10 : 20,
+      toValue: mobile && mobile !== '' || isFocused ? -10 : 20,
       duration: 200,
       useNativeDriver: false,
     }).start();
 
     Animated.timing(labelFontSize, {
-      toValue: focused || mobile ? 12 : 14,
+      toValue: mobile && mobile !== '' || isFocused ? 12 : 14,
       duration: 200,
       useNativeDriver: false,
     }).start();
 
-    // Animate label color based on validation
     Animated.timing(labelColor, {
-      toValue: isValid ? 0 : 1, // 0 for gray, 1 for red
+      toValue: isValid ? 0 : 1,
       duration: 200,
       useNativeDriver: false,
     }).start();
-  }, [focused, mobile, isValid]);
+  }, [mobile, isValid, isFocused]);
 
-  // Interpolate color change for the label
   const interpolatedLabelColor = labelColor.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#B0B0B0', '#FF0000'], // Gray to Red
+    outputRange: ['#B0B0B0', '#FF0000'],
   });
 
-  // Validate mobile number
-  const validateMobileNumber = (number: string): boolean => {
-    const regex = /^\+91\d{10}$/;
-    return regex.test(number);
-  };
-
-  // Handle OTP request
-  const handleGetMagicCode = async () => {
-    if (!validateMobileNumber(mobile)) {
-      setIsValid(false);
-      return;
-    }
-  
-    setIsValid(true);
-    try {
-      const requestBody = { mobileNumber: mobile };
-      console.log('Request Payload:', requestBody); // Log the payload to check the phone number
-  
-      const response = await axios.post(
-        'https://ixnbfvyeniksbqcfdmdo.supabase.co/functions/v1/users/request-otp',
-        requestBody,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            // Fix the Authorization header to include 'Bearer' keyword
-            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml4bmJmdnllbmlrc2JxY2ZkbWRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzE0MDE3NjgsImV4cCI6MjA0Njk3Nzc2OH0.h4JtVbwtKAe38yvtOLYvZIbhmMy6v2QCVg51Q11ubYg`,
-          },
-        }
-      );
-      console.log('Response:', response.data);
-  
-      if (response.status === 200) {
-        setOtpSent(true);
-        navigation.navigate('VerifyOtpPage', { mobileNumber: mobile });
-      } else {
-        setOtpSent(false);
-      }
-    } catch (error) {
-      setOtpSent(false);
-      if (axios.isAxiosError(error)) {
-        console.error('API call error:', error.response ? error.response.data : error.message);
-      } else {
-        console.error('API call error:', error);
-      }
-    }
-  };
-  
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <ScrollView contentContainerStyle={styles.innerContainer}>
           <View style={styles.topSection}>
             <Text style={styles.title}>Litz Chill</Text>
             <Text style={styles.subheading}>Let's Get You In!</Text>
             <Text style={styles.description}>
-              Enter your mobile number and we will send a{"\n"}magic code!
+              Enter your mobile number and we will send a magic code!
             </Text>
             <View style={styles.inputContainer}>
               <View
-                style={[
-                  styles.inputWrapper,
-                  { borderColor: isValid ? '#FFFFFF' : '#FF0000' },
-                ]}
-              >
-                {/* Fixed Phone Icon */}
-                <Icon
-                  name="phone"
-                  size={20}
-                  color="#FFFFFF"
-                  style={styles.icon}
-                />
+                style={[styles.inputWrapper, { borderColor: buttonPressed && !isValid ? '#FF0000' : '#FFFFFF' }]}>
+                <Icon name="phone" size={20} color="#FFFFFF" style={styles.icon} />
                 <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      fontSize: 18, // Increased font size
-                    },
-                  ]}
+                  style={[styles.input, { fontSize: 18 }]}
                   keyboardType="phone-pad"
                   value={mobile}
-                  onChangeText={(text) => setMobile(text)}
-                  onFocus={() => setFocused(true)}
+                  onChangeText={handleMobileChange}
                   onBlur={() => {
-                    setFocused(false);
-                    setIsValid(validateMobileNumber(mobile)); // Validate on blur
+                    setIsFocused(false);
+                    setIsValid(validateMobileNumber(mobile));
                   }}
+                  onFocus={() => setIsFocused(true)}
+                  placeholderTextColor="#B0B0B0"
                 />
-
-                {!isValid && (
-                  <MaterialIcons
-                    name="error-outline"
-                    size={20}
-                    color="#FF0000"
-                    style={styles.warningIcon}
-                  />
+                {!isValid && buttonPressed && (
+                  <MaterialIcons name="error-outline" size={20} color="#FF0000" style={styles.warningIcon} />
                 )}
               </View>
               <Animated.Text
-                style={[
-                  styles.floatingLabel,
-                  {
-                    top: labelPosition,
-                    fontSize: labelFontSize,
-                    color: interpolatedLabelColor, // Use animated color
-                  },
-                ]}
-              >
+                style={[styles.floatingLabel, {
+                  top: labelPosition,
+                  fontSize: labelFontSize,
+                  color: interpolatedLabelColor,
+                }]}>
                 Phone Number
               </Animated.Text>
-
-              {!isValid && (
-                <Text style={styles.errorText}>
-                  Oops! That doesn’t look right.
-                </Text>
-              )}
+              {!isValid && buttonPressed && <Text style={styles.errorText}>Oops! That doesn't look right</Text>}
             </View>
           </View>
+
+          {/* Error message */}
+          {errorMessage && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorMessage}>{errorMessage}</Text>
+              <TouchableOpacity onPress={() => handleRetry(navigation)}>
+                <Text style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {otpSent && (
             <View style={styles.successContainer}>
@@ -192,7 +146,14 @@ const LoginPage = () => {
             </View>
           )}
 
-          <TouchableOpacity style={styles.button} onPress={handleGetMagicCode}>
+          <TouchableOpacity
+            style={[styles.button, {
+              backgroundColor: buttonPressed && !isValid ? '#FF0000' : '#E21F27',
+              opacity: isValid ? 1 : 0.6,
+            }]}
+            onPress={navigateToVerifyOtp}
+            disabled={!isValid}
+          >
             <Text style={styles.buttonText}>Get the Magic Code</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -301,6 +262,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  errorContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  errorMessage: {
+    color: '#FF0000',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  retryText: {
+    color: '#E21F27',
+    fontSize: 14,
+    textDecorationLine: 'underline',
+    fontWeight: 'bold',
   },
 });
 
